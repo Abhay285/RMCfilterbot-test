@@ -1,101 +1,52 @@
-# Don't Remove Credit Tg - @VJ_Botz
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
-import datetime
-import time
-from info import *
-from utils import *
+# plugins/broadcast.py
 from pyrogram import Client, filters
-from pyrogram.errors import FloodWait
-import asyncio
+from pyrogram.types import Message
+from info import ADMINS, LOG_CHANNEL
+from pymongo import MongoClient
+from info import DATABASE_URI
 
-@Client.on_message(filters.command('broadcast') & filters.user(ADMIN))
-async def broadcast(bot, message):
+client_db = MongoClient(DATABASE_URI)
+db = client_db['filterbot']
+sessions = db['sessions']
+users = db['users']
+
+@Client.on_message(filters.command("login") & filters.private)
+async def login(client, message: Message):
+    if str(message.from_user.id) in ADMINS:
+        sessions.update_one({"user_id": message.from_user.id}, {"$set": {"active": True}}, upsert=True)
+        await message.reply("✅ Login successful.")
+
+@Client.on_message(filters.command("logout") & filters.private)
+async def logout(client, message: Message):
+    sessions.delete_one({"user_id": message.from_user.id})
+    await message.reply("🔒 Logged out.")
+
+@Client.on_message(filters.command("broadcast") & filters.private)
+async def broadcast_handler(client, message: Message):
+    if not sessions.find_one({"user_id": message.from_user.id}):
+        return await message.reply("❌ You are not logged in.")
     if not message.reply_to_message:
-       return await message.reply("Use this command as a reply to any message!")
-    m=await message.reply("Please wait...")   
+        return await message.reply("Reply to a message to broadcast.")
 
-    count, users = await get_users()
-    stats     = "⚡ Broadcast Processing.."
-    br_msg    = message.reply_to_message
-    total     = count       
-    remaining = total
-    success   = 0
-    failed    = 0    
-     
-    for user in users:
-        chat_id = user["_id"]
-        trying = await copy_msgs(br_msg, chat_id)
-        if trying==False:
-           failed+=1
-           remaining-=1
-        else:
-           success+=1
-           remaining-=1
-        try:                                     
-           await m.edit(script.BROADCAST.format(stats, total, remaining, success, failed))                                 
-        except:
-           pass
-    stats = "✅ Broadcast Completed"
-    await m.reply(script.BROADCAST.format(stats, total, remaining, success, failed)) 
-    await m.delete()                                
-      
+    sent = 0
+    for user in users.find():
+        try:
+            await client.copy_message(user['user_id'], message.chat.id, message.reply_to_message.id)
+            sent += 1
+        except: continue
+    await message.reply(f"✅ Broadcast sent to {sent} users.")
 
-@Client.on_message(filters.command('broadcast_groups') & filters.user(ADMIN))
-async def grp_broadcast(bot, message):
-    if not message.reply_to_message:
-       return await message.reply("Use this command as a reply to any message!")
-    m=await message.reply("Please wait...")   
+@Client.on_message(filters.command("user") & filters.private)
+async def user_handler(client, message: Message):
+    await message.reply(f"👤 Your ID: `{message.from_user.id}`")
 
-    count, groups = await get_groups()
-    stats     = "⚡ Broadcast Processing.."
-    br_msg    = message.reply_to_message
-    total     = count       
-    remaining = total
-    success   = 0
-    failed    = 0    
-     
-    for group in groups:
-        chat_id = group["_id"]
-        trying = await grp_copy_msgs(br_msg, chat_id)
-        if trying==False:
-           failed+=1
-           remaining-=1
-        else:
-           success+=1
-           remaining-=1
-        try:                                     
-           await m.edit(script.BROADCAST.format(stats, total, remaining, success, failed))                                 
-        except:
-           pass
-    stats = "✅ Broadcast Completed"
-    await m.reply(script.BROADCAST.format(stats, total, remaining, success, failed)) 
-    await m.delete()
+@Client.on_message(filters.command("userc") & filters.private)
+async def userc_handler(client, message: Message):
+    count = users.count_documents({})
+    await message.reply(f"👥 Total users: {count}")
 
-    
-    
-async def grp_copy_msgs(br_msg, chat_id):
-    try:
-       h = await br_msg.copy(chat_id)
-       try:
-           await h.pin()
-       except:
-           pass
-    except FloodWait as e:
-       await asyncio.sleep(e.value)
-       await copy_msgs(br_msg, chat_id)
-    except Exception as e:
-       await delete_group(chat_id)
-       return False
-
-   
-async def copy_msgs(br_msg, chat_id):
-    try:
-       await br_msg.copy(chat_id)
-    except FloodWait as e:
-       await asyncio.sleep(e.value)
-       await copy_msgs(br_msg, chat_id)
-    except Exception as e:
-       await delete_user(chat_id)
-       return False
+@Client.on_message(filters.command("stats") & filters.private)
+async def stats_handler(client, message: Message):
+    count = users.count_documents({})
+    admins = ", ".join(ADMINS)
+    await message.reply(f"📊 Users: {count}\n👮 Admins: {admins}")
