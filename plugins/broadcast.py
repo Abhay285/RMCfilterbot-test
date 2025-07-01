@@ -1,83 +1,92 @@
+import logging
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.errors import FloodWait
+from utils.Helpers import get_users, get_groups
+from utils.Script import script
+from info import ADMIN
 
-@Client.on_message(filters.command('broadcast') & filters.user(ADMIN))
-async def user_broadcast(bot, message):
-    if not message.reply_to_message:
-        return await message.reply("Use this command as a reply to any message!")
-    
-    m = await message.reply("⚡ Starting user broadcast...")
-    users = await get_users()
-    total = len(users)
-    success = failed = 0
+logger = logging.getLogger(__name__)
 
-    for index, user in enumerate(users):
-        try:
-            await message.reply_to_message.copy(user["_id"])
-            success += 1
-        except FloodWait as e:
-            await asyncio.sleep(e.value + 2)
-            await message.reply_to_message.copy(user["_id"])
-            success += 1
-        except Exception:
-            await delete_user(user["_id"])
-            failed += 1
+@Client.on_message(filters.command("broadcast") & filters.user(ADMIN))
+async def broadcast_users(bot, message):
+    try:
+        if not message.reply_to_message:
+            return await message.reply("❌ Reply to a message to broadcast")
         
-        if index % 100 == 0 or index == total - 1:
-            await m.edit(script.BROADCAST.format(
-                "IN PROGRESS", 
-                total, 
-                total - index - 1,
-                success,
-                failed
-            ))
-    
-    await m.edit(script.BROADCAST.format(
-        "USER BROADCAST COMPLETED", 
-        total, 
-        0,
-        success,
-        failed
-    ))
-
-@Client.on_message(filters.command('broadcast_groups') & filters.user(ADMIN))
-async def group_broadcast(bot, message):
-    if not message.reply_to_message:
-        return await message.reply("Use this command as a reply to any message!")
-    
-    m = await message.reply("⚡ Starting group broadcast...")
-    groups = await get_groups()
-    total = len(groups)
-    success = failed = 0
-
-    for index, group in enumerate(groups):
-        try:
-            msg = await message.reply_to_message.copy(group["_id"])
-            await msg.pin(disable_notification=True)
-            success += 1
-        except FloodWait as e:
-            await asyncio.sleep(e.value + 2)
-            msg = await message.reply_to_message.copy(group["_id"])
-            await msg.pin(disable_notification=True)
-            success += 1
-        except Exception:
-            await delete_group(group["_id"])
-            failed += 1
+        m = await message.reply("⚡ Broadcasting...")
         
-        if index % 50 == 0 or index == total - 1:
-            await m.edit(script.BROADCAST.format(
-                "IN PROGRESS", 
-                total, 
-                total - index - 1,
-                success,
-                failed
-            ))
-    
-    await m.edit(script.BROADCAST.format(
-        "GROUP BROADCAST COMPLETED", 
-        total, 
-        0,
-        success,
-        failed
-    ))
+        users = await get_users()
+        total = len(users)
+        success = 0
+        
+        for user in users:
+            try:
+                await message.reply_to_message.copy(user["_id"])
+                success += 1
+            except Exception as e:
+                logger.error(f"Broadcast to {user['_id']} failed: {str(e)}")
+            
+            # Update progress
+            if total > 0 and (success % 10 == 0 or success == total):
+                await m.edit(script.BROADCAST.format(
+                    "IN PROGRESS", 
+                    total, 
+                    total - success,
+                    success,
+                    total - success
+                ))
+        
+        # Final report
+        await m.edit(script.BROADCAST.format(
+            "COMPLETED", 
+            total, 
+            0,
+            success,
+            total - success
+        ))
+        
+    except Exception as e:
+        logger.error(f"Broadcast error: {str(e)}")
+        await message.reply("⚠️ Broadcast failed!")
+
+@Client.on_message(filters.command("broadcast_groups") & filters.user(ADMIN))
+async def broadcast_groups(bot, message):
+    try:
+        if not message.reply_to_message:
+            return await message.reply("❌ Reply to a message to broadcast")
+        
+        m = await message.reply("⚡ Broadcasting to groups...")
+        
+        groups = await get_groups()
+        total = len(groups)
+        success = 0
+        
+        for group in groups:
+            try:
+                await message.reply_to_message.copy(group["_id"])
+                success += 1
+            except Exception as e:
+                logger.error(f"Broadcast to {group['_id']} failed: {str(e)}")
+            
+            # Update progress
+            if total > 0 and (success % 5 == 0 or success == total):
+                await m.edit(script.BROADCAST.format(
+                    "IN PROGRESS", 
+                    total, 
+                    total - success,
+                    success,
+                    total - success
+                ))
+        
+        # Final report
+        await m.edit(script.BROADCAST.format(
+            "COMPLETED", 
+            total, 
+            0,
+            success,
+            total - success
+        ))
+        
+    except Exception as e:
+        logger.error(f"Group broadcast error: {str(e)}")
+        await message.reply("⚠️ Broadcast failed!")
