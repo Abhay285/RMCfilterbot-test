@@ -1,211 +1,155 @@
-from info import *
-from utils import *
-from plugins.generate import database
-from pyrogram import Client, filters, enums
-from pyrogram.errors import (
-    UserAlreadyParticipant,
-    ChannelPrivate,
-    ChatAdminRequired,
-    PeerIdInvalid
-)
+import logging
+from pyrogram import Client, filters
+from utils.Helpers import get_group, update_group
+from utils.Script import script
+from info import LOG_CHANNEL
 
-async def get_user_session():
-    """Fetch user session from database"""
-    return await database.find_one({"chat_id": ADMIN})
+logger = logging.getLogger(__name__)
 
 @Client.on_message(filters.group & filters.command("connect"))
-async def connect_group(bot, message):
-    # Initial setup
-    if len(message.command) < 2:
-        return await message.reply("❌ **Format:** `/connect channel_id`")
-    
-    m = await message.reply("🔁 **Connecting...**")
-    
-    # Fetch user session
-    user_data = await get_user_session()
-    if not user_data:
-        return await m.edit("**⚠️ Contact Admin to log in first!**")
-    
-    # Get group details
-    group = await get_group(message.chat.id)
-    if not group:
-        return await bot.leave_chat(message.chat.id)
-    
-    # Permission check
-    if message.from_user.id != group["user_id"]:
-        return await m.edit(f"❌ Only **{group['user_name']}** can use this command")
-    
-    # Verification check
-    if not group["verified"]:
-        return await m.edit("🔒 **Unverified group!** Use /verify first")
-
+async def connect_channel(bot, message):
     try:
-        channel_id = int(message.command[1])
+        # Validate command
+        if len(message.command) < 2:
+            return await message.reply("❌ Format: /connect channel_id")
+        
+        # Get group
+        group = await get_group(message.chat.id)
+        if not group:
+            return await bot.leave_chat(message.chat.id)
+        
+        # Check permissions
+        if message.from_user.id != group["user_id"]:
+            return await message.reply(f"⚠️ Only {group['user_name']} can do this")
+        
+        # Get channel ID
+        try:
+            channel_id = int(message.command[1])
+        except ValueError:
+            return await message.reply("❌ Invalid Channel ID! Must be integer")
+        
+        # Check if already connected
         channels = group.get("channels", [])
-        
-        # Check if channel already connected
         if channel_id in channels:
-            return await m.edit("⚠️ Channel already connected!")
-    except ValueError:
-        return await m.edit("❌ **Invalid Channel ID!** Must be integer")
-
-    try:
-        # Get channel and group objects
-        channel = await bot.get_chat(channel_id)
-        current_group = await bot.get_chat(message.chat.id)
+            return await message.reply("⚠️ Channel already connected")
         
-        # Join channel with user account
-        async with Client(
-            "user_session", 
-            session_string=user_data['session'], 
-            api_hash=API_HASH, 
-            api_id=API_ID
-        ) as user_client:
-            try:
-                await user_client.join_chat(channel.invite_link)
-            except UserAlreadyParticipant:
-                pass
-        
-        # Update database
+        # Add channel
         channels.append(channel_id)
         await update_group(message.chat.id, {"channels": channels})
         
-        # Send success message
-        success_msg = (
-            f"✅ **Successfully connected to [{channel.title}]({channel.invite_link})!**\n\n"
-            f"• **Channel ID:** `{channel_id}`\n"
-            f"• **Total Connections:** `{len(channels)}`"
-        )
-        await m.edit(success_msg, disable_web_page_preview=True)
+        # Get channel info
+        try:
+            channel = await bot.get_chat(channel_id)
+            channel_link = f"[{channel.title}]({channel.invite_link})"
+        except:
+            channel_link = f"`{channel_id}`"
         
-        # Log to channel
-        log_msg = (
+        # Send success
+        await message.reply(f"✅ Connected to channel {channel_link}")
+        
+        # Log
+        log_text = (
             f"#NEW_CONNECTION\n\n"
-            f"👤 **User:** {message.from_user.mention} (`{message.from_user.id}`)\n"
-            f"👥 **Group:** [{current_group.title}]({current_group.invite_link}) (`{message.chat.id}`)\n"
-            f"📢 **Channel:** [{channel.title}]({channel.invite_link}) (`{channel_id}`)"
+            f"👤 User: {message.from_user.mention}\n"
+            f"👥 Group: {message.chat.title} ({message.chat.id})\n"
+            f"📢 Channel: {channel_link}"
         )
-        await bot.send_message(LOG_CHANNEL, log_msg)
+        await bot.send_message(LOG_CHANNEL, log_text)
         
-    except (ChannelPrivate, ChatAdminRequired):
-        await m.edit("❌ **Bot needs admin rights in channel!**")
-    except PeerIdInvalid:
-        await m.edit("❌ **Invalid Channel ID!**")
     except Exception as e:
-        await m.edit(f"❌ **Error:** `{str(e)}`")
-        await bot.send_message(LOG_CHANNEL, f"#CONNECT_ERROR\n\n`{e}`")
+        logger.error(f"Connect error: {str(e)}")
+        await message.reply("⚠️ An error occurred!")
 
 @Client.on_message(filters.group & filters.command("disconnect"))
-async def disconnect_group(bot, message):
-    # Initial setup
-    if len(message.command) < 2:
-        return await message.reply("❌ **Format:** `/disconnect channel_id`")
-    
-    m = await message.reply("🔁 **Disconnecting...**")
-    
-    # Get group details
-    group = await get_group(message.chat.id)
-    if not group:
-        return await bot.leave_chat(message.chat.id)
-    
-    # Permission check
-    if message.from_user.id != group["user_id"]:
-        return await m.edit(f"❌ Only **{group['user_name']}** can use this command")
-    
+async def disconnect_channel(bot, message):
     try:
-        channel_id = int(message.command[1])
+        # Validate command
+        if len(message.command) < 2:
+            return await message.reply("❌ Format: /disconnect channel_id")
+        
+        # Get group
+        group = await get_group(message.chat.id)
+        if not group:
+            return await bot.leave_chat(message.chat.id)
+        
+        # Check permissions
+        if message.from_user.id != group["user_id"]:
+            return await message.reply(f"⚠️ Only {group['user_name']} can do this")
+        
+        # Get channel ID
+        try:
+            channel_id = int(message.command[1])
+        except ValueError:
+            return await message.reply("❌ Invalid Channel ID! Must be integer")
+        
+        # Remove channel
         channels = group.get("channels", [])
-        
-        # Check if channel exists
         if channel_id not in channels:
-            return await m.edit("❌ Channel not connected!")
-    except ValueError:
-        return await m.edit("❌ **Invalid Channel ID!** Must be integer")
-
-    try:
-        # Get channel and group objects
-        channel = await bot.get_chat(channel_id)
-        current_group = await bot.get_chat(message.chat.id)
+            return await message.reply("⚠️ Channel not connected")
         
-        # Leave channel with user account
-        user_data = await get_user_session()
-        if user_data:
-            async with Client(
-                "user_session", 
-                session_string=user_data['session'], 
-                api_hash=API_HASH, 
-                api_id=API_ID
-            ) as user_client:
-                await user_client.leave_chat(channel_id)
-        
-        # Update database
         channels.remove(channel_id)
         await update_group(message.chat.id, {"channels": channels})
         
-        # Send success message
-        success_msg = (
-            f"✅ **Disconnected from [{channel.title}]({channel.invite_link})!**\n\n"
-            f"• **Channel ID:** `{channel_id}`\n"
-            f"• **Remaining Connections:** `{len(channels)}`"
-        )
-        await m.edit(success_msg, disable_web_page_preview=True)
+        # Get channel info
+        try:
+            channel = await bot.get_chat(channel_id)
+            channel_link = f"[{channel.title}]({channel.invite_link})"
+        except:
+            channel_link = f"`{channel_id}`"
         
-        # Log to channel
-        log_msg = (
+        # Send success
+        await message.reply(f"✅ Disconnected from channel {channel_link}")
+        
+        # Log
+        log_text = (
             f"#DISCONNECTION\n\n"
-            f"👤 **User:** {message.from_user.mention} (`{message.from_user.id}`)\n"
-            f"👥 **Group:** [{current_group.title}]({current_group.invite_link}) (`{message.chat.id}`)\n"
-            f"📢 **Channel:** [{channel.title}]({channel.invite_link}) (`{channel_id}`)"
+            f"👤 User: {message.from_user.mention}\n"
+            f"👥 Group: {message.chat.title} ({message.chat.id})\n"
+            f"📢 Channel: {channel_link}"
         )
-        await bot.send_message(LOG_CHANNEL, log_msg)
+        await bot.send_message(LOG_CHANNEL, log_text)
         
-    except (ChannelPrivate, ChatAdminRequired):
-        await m.edit("❌ **Failed to leave channel!**")
     except Exception as e:
-        await m.edit(f"❌ **Error:** `{str(e)}`")
-        await bot.send_message(LOG_CHANNEL, f"#DISCONNECT_ERROR\n\n`{e}`")
+        logger.error(f"Disconnect error: {str(e)}")
+        await message.reply("⚠️ An error occurred!")
 
 @Client.on_message(filters.group & filters.command("connections"))
-async def show_connections(bot, message):
-    # Get group details
-    group = await get_group(message.chat.id)
-    if not group:
-        return await bot.leave_chat(message.chat.id)
-    
-    # Permission check
-    if message.from_user.id != group["user_id"]:
-        return await message.reply(f"❌ Only **{group['user_name']}** can use this command")
-    
-    channels = group.get("channels", [])
-    f_sub = group.get("f_sub")
-    
-    if not channels and not f_sub:
-        return await message.reply("🔌 **No connections found!**")
-    
-    response = "🔗 **Group Connections:**\n\n"
-    
-    # Process channels
-    for idx, channel_id in enumerate(channels, 1):
-        try:
-            chat = await bot.get_chat(channel_id)
-            response += (
-                f"{idx}. 📢 **Channel:** [{chat.title}]({chat.invite_link})\n"
-                f"   • **ID:** `{channel_id}`\n"
-                f"   • **Members:** `{chat.members_count}`\n\n"
-            )
-        except Exception:
-            response += f"{idx}. ❌ **Invalid Channel:** `{channel_id}`\n\n"
-    
-    # Process FSub channel
-    if f_sub:
-        try:
-            f_chat = await bot.get_chat(f_sub)
-            response += (
-                "🔔 **Force Subscribe:**\n"
-                f"   • **Channel:** [{f_chat.title}]({f_chat.invite_link})\n"
-                f"   • **ID:** `{f_sub}`\n"
-            )
-        except Exception:
-            response += "🔔 **Force Subscribe:**\n   • ❌ Invalid Channel\n"
-    
-    await message.reply(response, disable_web_page_preview=True)
+async def list_connections(bot, message):
+    try:
+        group = await get_group(message.chat.id)
+        if not group:
+            return
+        
+        # Check permissions
+        if message.from_user.id != group["user_id"]:
+            return await message.reply(f"⚠️ Only {group['user_name']} can do this")
+        
+        channels = group.get("channels", [])
+        f_sub = group.get("f_sub")
+        
+        if not channels and not f_sub:
+            return await message.reply("❌ No connections configured")
+        
+        response = "🔗 **Group Connections:**\n\n"
+        
+        # List channels
+        for channel_id in channels:
+            try:
+                chat = await bot.get_chat(channel_id)
+                response += f"📢 Channel: [{chat.title}]({chat.invite_link})\n🆔 ID: `{channel_id}`\n\n"
+            except:
+                response += f"📢 Channel: `{channel_id}` (Invalid)\n\n"
+        
+        # List FSub channel
+        if f_sub:
+            try:
+                chat = await bot.get_chat(f_sub)
+                response += f"🔔 Force Subscribe: [{chat.title}]({chat.invite_link})\n🆔 ID: `{f_sub}`"
+            except:
+                response += f"🔔 Force Subscribe: `{f_sub}` (Invalid)"
+        
+        await message.reply(response, disable_web_page_preview=True)
+        
+    except Exception as e:
+        logger.error(f"Connections error: {str(e)}")
+        await message.reply("⚠️ An error occurred!")
