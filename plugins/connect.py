@@ -9,80 +9,61 @@ logger = logging.getLogger(__name__)
 @Client.on_message(filters.group & filters.command("connect"))
 async def connect_channel(bot, message):
     try:
-        # Validate command
         if len(message.command) < 2:
             return await message.reply("❌ Format: /connect channel_id")
         
-        # Get group
         group = await get_group(message.chat.id)
         if not group:
             return await bot.leave_chat(message.chat.id)
         
-        # Check permissions
         if message.from_user.id != group["user_id"]:
             return await message.reply(f"⚠️ Only {group['user_name']} can do this")
         
-        # Get channel ID
         try:
             channel_id = int(message.command[1])
         except ValueError:
             return await message.reply("❌ Invalid Channel ID! Must be integer")
         
-        # Check if already connected
         channels = group.get("channels", [])
         if channel_id in channels:
             return await message.reply("⚠️ Channel already connected")
         
-        # Add channel
         channels.append(channel_id)
         await update_group(message.chat.id, {"channels": channels})
         
-        # Get channel info
         try:
             channel = await bot.get_chat(channel_id)
             channel_link = f"[{channel.title}]({channel.invite_link})"
         except:
             channel_link = f"`{channel_id}`"
         
-        # Send success
         await message.reply(f"✅ Connected to channel {channel_link}")
         
-        # Log
-        log_text = (
-            f"#NEW_CONNECTION\n\n"
-            f"👤 User: {message.from_user.mention}\n"
-            f"👥 Group: {message.chat.title} ({message.chat.id})\n"
-            f"📢 Channel: {channel_link}"
-        )
+        log_text = f"#NEW_CONNECTION\n\n👤 User: {message.from_user.mention}\n👥 Group: {message.chat.title}\n📢 Channel: {channel_link}"
         await bot.send_message(LOG_CHANNEL, log_text)
         
     except Exception as e:
-        logger.error(f"Connect error: {str(e)}")
+        logger.error(f"Connect error: {e}")
         await message.reply("⚠️ An error occurred!")
 
 @Client.on_message(filters.group & filters.command("disconnect"))
 async def disconnect_channel(bot, message):
     try:
-        # Validate command
         if len(message.command) < 2:
             return await message.reply("❌ Format: /disconnect channel_id")
         
-        # Get group
         group = await get_group(message.chat.id)
         if not group:
             return await bot.leave_chat(message.chat.id)
         
-        # Check permissions
         if message.from_user.id != group["user_id"]:
             return await message.reply(f"⚠️ Only {group['user_name']} can do this")
         
-        # Get channel ID
         try:
             channel_id = int(message.command[1])
         except ValueError:
             return await message.reply("❌ Invalid Channel ID! Must be integer")
         
-        # Remove channel
         channels = group.get("channels", [])
         if channel_id not in channels:
             return await message.reply("⚠️ Channel not connected")
@@ -90,27 +71,74 @@ async def disconnect_channel(bot, message):
         channels.remove(channel_id)
         await update_group(message.chat.id, {"channels": channels})
         
-        # Get channel info
         try:
             channel = await bot.get_chat(channel_id)
             channel_link = f"[{channel.title}]({channel.invite_link})"
         except:
             channel_link = f"`{channel_id}`"
         
-        # Send success
         await message.reply(f"✅ Disconnected from channel {channel_link}")
-        
-        # Log
-        log_text = (
-            f"#DISCONNECTION\n\n"
-            f"👤 User: {message.from_user.mention}\n"
-            f"👥 Group: {message.chat.title} ({message.chat.id})\n"
-            f"📢 Channel: {channel_link}"
-        )
+        log_text = f"#DISCONNECTION\n\n👤 User: {message.from_user.mention}\n👥 Group: {message.chat.title}\n📢 Channel: {channel_link}"
         await bot.send_message(LOG_CHANNEL, log_text)
         
     except Exception as e:
-        logger.error(f"Disconnect error: {str(e)}")
+        logger.error(f"Disconnect error: {e}")
+        await message.reply("⚠️ An error occurred!")
+
+@Client.on_message(filters.group & filters.command("fsub"))
+async def set_fsub(bot, message):
+    try:
+        if len(message.command) < 2:
+            return await message.reply("❌ Format: /fsub channel_id")
+        
+        group = await get_group(message.chat.id)
+        if not group:
+            return await bot.leave_chat(message.chat.id)
+        
+        if message.from_user.id != group["user_id"]:
+            return await message.reply(f"⚠️ Only {group['user_name']} can do this")
+        
+        try:
+            channel_id = int(message.command[1])
+        except ValueError:
+            return await message.reply("❌ Invalid Channel ID! Must be integer")
+        
+        await update_group(message.chat.id, {"f_sub": channel_id})
+        
+        try:
+            channel = await bot.get_chat(channel_id)
+            channel_link = f"[{channel.title}]({channel.invite_link})"
+        except:
+            channel_link = f"`{channel_id}`"
+        
+        await message.reply(f"✅ Force Subscribe set to {channel_link}")
+        log_text = f"#FSUB_SET\n\n👤 User: {message.from_user.mention}\n👥 Group: {message.chat.title}\n📢 Channel: {channel_link}"
+        await bot.send_message(LOG_CHANNEL, log_text)
+        
+    except Exception as e:
+        logger.error(f"Set FSub error: {e}")
+        await message.reply("⚠️ An error occurred!")
+
+@Client.on_message(filters.group & filters.command("nofsub"))
+async def remove_fsub(bot, message):
+    try:
+        group = await get_group(message.chat.id)
+        if not group:
+            return await bot.leave_chat(message.chat.id)
+        
+        if message.from_user.id != group["user_id"]:
+            return await message.reply(f"⚠️ Only {group['user_name']} can do this")
+        
+        if not group.get("f_sub"):
+            return await message.reply("❌ Force Subscribe is not set")
+        
+        await update_group(message.chat.id, {"f_sub": None})
+        await message.reply("✅ Force Subscribe removed")
+        log_text = f"#FSUB_REMOVED\n\n👤 User: {message.from_user.mention}\n👥 Group: {message.chat.title}"
+        await bot.send_message(LOG_CHANNEL, log_text)
+        
+    except Exception as e:
+        logger.error(f"Remove FSub error: {e}")
         await message.reply("⚠️ An error occurred!")
 
 @Client.on_message(filters.group & filters.command("connections"))
@@ -120,7 +148,6 @@ async def list_connections(bot, message):
         if not group:
             return
         
-        # Check permissions
         if message.from_user.id != group["user_id"]:
             return await message.reply(f"⚠️ Only {group['user_name']} can do this")
         
@@ -132,24 +159,22 @@ async def list_connections(bot, message):
         
         response = "🔗 **Group Connections:**\n\n"
         
-        # List channels
-        for channel_id in channels:
+        for idx, channel_id in enumerate(channels, 1):
             try:
                 chat = await bot.get_chat(channel_id)
-                response += f"📢 Channel: [{chat.title}]({chat.invite_link})\n🆔 ID: `{channel_id}`\n\n"
+                response += f"{idx}. 📢 [{chat.title}]({chat.invite_link}) `{channel_id}`\n"
             except:
-                response += f"📢 Channel: `{channel_id}` (Invalid)\n\n"
+                response += f"{idx}. 📢 `{channel_id}` (Invalid)\n"
         
-        # List FSub channel
         if f_sub:
             try:
                 chat = await bot.get_chat(f_sub)
-                response += f"🔔 Force Subscribe: [{chat.title}]({chat.invite_link})\n🆔 ID: `{f_sub}`"
+                response += f"\n🔔 **Force Subscribe:** [{chat.title}]({chat.invite_link}) `{f_sub}`"
             except:
-                response += f"🔔 Force Subscribe: `{f_sub}` (Invalid)"
+                response += f"\n🔔 **Force Subscribe:** `{f_sub}` (Invalid)"
         
         await message.reply(response, disable_web_page_preview=True)
         
     except Exception as e:
-        logger.error(f"Connections error: {str(e)}")
+        logger.error(f"Connections error: {e}")
         await message.reply("⚠️ An error occurred!")
