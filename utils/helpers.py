@@ -1,28 +1,30 @@
-# Don't Remove Credit Tg - @VJ_Botz
-# Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
-# Ask Doubt on telegram @KingVJ01
-
 import asyncio
 import logging
-from info import *
-from pyrogram import enums
-from imdb import Cinemagoer
-from pymongo.errors import DuplicateKeyError
-from pyrogram.errors import UserNotParticipant
+from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
-from pyrogram.types import ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
+from info import DATABASE_URI
 
-# Initialize database client and collections
-dbclient = AsyncIOMotorClient(DATABASE_URI)
-db = dbclient["Channel-Filter"]
-grp_col = db["GROUPS"]
-user_col = db["USERS"]
-dlt_col = db["Auto-Delete"]
+logger = logging.getLogger(__name__)
 
-ia = Cinemagoer()
+# Initialize database
+db_client = AsyncIOMotorClient(DATABASE_URI)
+db = db_client["ChannelFilter"]
+groups_col = db["Groups"]
+users_col = db["Users"]
+pending_col = db["PendingRequests"]
 
+async def create_indexes():
+    """Create database indexes at startup"""
+    try:
+        await pending_col.create_index("user_id", unique=True)
+        await pending_col.create_index("timestamp", expireAfterSeconds=86400)  # 24h TTL
+        logger.info("Database indexes created")
+    except Exception as e:
+        logger.error(f"Index creation error: {str(e)}")
+
+# Group Management Functions
 async def add_group(group_id, group_name, user_name, user_id, channels, f_sub, verified):
+    """Add or update a group in the database"""
     data = {
         "_id": group_id,
         "name": group_name,
@@ -30,119 +32,142 @@ async def add_group(group_id, group_name, user_name, user_id, channels, f_sub, v
         "user_name": user_name,
         "channels": channels,
         "f_sub": f_sub,
-        "verified": verified
+        "verified": verified,
+        "created_at": datetime.utcnow(),
+        "last_updated": datetime.utcnow()
     }
     try:
-        await grp_col.insert_one(data)
-    except DuplicateKeyError:
-        pass  # Group already exists, no action needed
+        await groups_col.update_one(
+            {"_id": group_id},
+            {"$set": data},
+            upsert=True
+        )
+        return True
     except Exception as e:
-        logging.error(f"Error adding group {group_id}: {str(e)}")
+        logger.error(f"Error adding group {group_id}: {str(e)}")
+        return False
 
 async def get_group(group_id):
-    group = await grp_col.find_one({"_id": group_id})
-    return dict(group) if group else None
+    """Retrieve group data"""
+    try:
+        return await groups_col.find_one({"_id": group_id})
+    except Exception as e:
+        logger.error(f"Error getting group {group_id}: {str(e)}")
+        return None
 
 async def get_groups():
-    cursor = grp_col.find({})
-    groups = await cursor.to_list(length=await grp_col.count_documents({}))
-    return groups
-
-async def update_group(group_id, new_data):
-    result = await grp_col.update_one({"_id": group_id}, {"$set": new_data})
-    return result.modified_count > 0
-
-async def delete_group(group_id):
-    result = await grp_col.delete_one({"_id": group_id})
-    return result.deleted_count > 0
-
-async def add_user(user_id, user_name):
-    data = {"_id": user_id, "name": user_name}
+    """Get all groups"""
     try:
-        await user_col.insert_one(data)
-    except DuplicateKeyError:
-        pass  # User already exists, no action needed
-
-async def get_users():
-    cursor = user_col.find({})
-    users = await cursor.to_list(length=await user_col.count_documents({}))
-    return users
-
-async def delete_user(user_id):
-    result = await user_col.delete_one({"_id": user_id})
-    return result.deleted_count > 0
-
-async def search_imdb(query):
-    try:
-        # Search by IMDb ID
-        if query.isdigit():
-            movie = ia.get_movie(int(query))
-            return movie["title"]
-        # Search by movie title
-        movies = ia.search_movie(query, results=10)
-        return [{"title": movie["title"], "year": f" - {movie.get('year', 'N/A')}", "id": movie.movieID} for movie in movies]
+        return await groups_col.find().to_list(None)
     except Exception as e:
-        logging.error(f"Error searching IMDb: {str(e)}")
+        logger.error(f"Error getting groups: {str(e)}")
         return []
 
-async def force_sub(bot, message):
-    group = await get_group(message.chat.id)
-    if not group:
-        logging.warning(f"Group not found: {message.chat.id}")
-        return False
-
-    f_sub = group.get("f_sub", False)
-    admin_id = group.get("user_id")
-    if not f_sub:
-        return True  # No forced subscription required
-
-    if message.from_user is None:
-        return True  # Invalid user, but we'll allow the action
-
+async def update_group(group_id, new_data):
+    """Update group data"""
     try:
-        f_link = (await bot.get_chat(f_sub)).invite_link
-        member = await bot.get_chat_member(f_sub, message.from_user.id)
-        if member.status == enums.ChatMemberStatus.BANNED:
-            await message.reply(f"Sorry {message.from_user.mention}, you are banned in our channel.")
-            await asyncio.sleep(10)
-            await bot.ban_chat_member(message.chat.id, message.from_user.id)
-            return False
-    except UserNotParticipant:
-        logging.info(f"{message.from_user.id} is not a participant in the channel.")
-        await bot.restrict_chat_member(
-            chat_id=message.chat.id,
-            user_id=message.from_user.id,
-            permissions=ChatPermissions(can_send_messages=False)
+        new_data["last_updated"] = datetime.utcnow()
+        result = await groups_col.update_one(
+            {"_id": group_id},
+            {"$set": new_data}
         )
-        await message.reply(f"<b>🚫 Please join the channel to send messages!</b>", 
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Join Channel", url=f_link)]]))
-        await message.delete()
-        return False
+        return result.modified_count > 0
     except Exception as e:
-        logging.error(f"Error in force_sub for {message.from_user.id}: {str(e)}")
-        await bot.send_message(chat_id=admin_id, text=f"Error in force_sub: {str(e)}")
+        logger.error(f"Error updating group {group_id}: {str(e)}")
         return False
-    else:
-        return True
 
-async def broadcast_messages(user_id, message):
+async def delete_group(group_id):
+    """Delete a group"""
     try:
-        await message.copy(chat_id=user_id)
-        return True, "Success"
-    except FloodWait as e:
-        await asyncio.sleep(e.x)
-        return await broadcast_messages(user_id, message)
-    except InputUserDeactivated:
-        await delete_user(user_id)
-        logging.info(f"{user_id} removed from database because the account is deleted.")
-        return False, "Deleted"
-    except UserIsBlocked:
-        logging.info(f"{user_id} blocked the bot.")
-        return False, "Blocked"
-    except PeerIdInvalid:
-        await delete_user(user_id)
-        logging.info(f"{user_id} has an invalid peer ID.")
-        return False, "Error"
+        result = await groups_col.delete_one({"_id": group_id})
+        return result.deleted_count > 0
     except Exception as e:
-        logging.error(f"Error broadcasting message to {user_id}: {str(e)}")
-        return False, "Error"
+        logger.error(f"Error deleting group {group_id}: {str(e)}")
+        return False
+
+# User Management Functions
+async def add_user(user_id, user_name):
+    """Add or update a user"""
+    data = {
+        "_id": user_id,
+        "name": user_name,
+        "joined_at": datetime.utcnow(),
+        "last_seen": datetime.utcnow()
+    }
+    try:
+        await users_col.update_one(
+            {"_id": user_id},
+            {"$set": data},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error adding user {user_id}: {str(e)}")
+        return False
+
+async def get_users():
+    """Get all users"""
+    try:
+        return await users_col.find().to_list(None)
+    except Exception as e:
+        logger.error(f"Error getting users: {str(e)}")
+        return []
+
+async def total_users_count():
+    """Get total user count"""
+    try:
+        return await users_col.count_documents({})
+    except Exception as e:
+        logger.error(f"Error counting users: {str(e)}")
+        return 0
+
+async def total_chat_count():
+    """Get total group count"""
+    try:
+        return await groups_col.count_documents({})
+    except Exception as e:
+        logger.error(f"Error counting groups: {str(e)}")
+        return 0
+
+# Pending Request Functions
+async def save_pending_request(user_id, chat_id, query):
+    """Save a pending search request"""
+    try:
+        await pending_col.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "chat_id": chat_id,
+                "query": query,
+                "timestamp": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error saving pending request: {str(e)}")
+        return False
+
+async def get_pending_request(user_id):
+    """Get a pending request"""
+    try:
+        return await pending_col.find_one({"user_id": user_id})
+    except Exception as e:
+        logger.error(f"Error getting pending request: {str(e)}")
+        return None
+
+async def delete_pending_request(user_id):
+    """Delete a pending request"""
+    try:
+        await pending_col.delete_one({"user_id": user_id})
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting pending request: {str(e)}")
+        return False
+
+async def delete_after_delay(message, delay):
+    """Delete message after delay"""
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except:
+        pass
