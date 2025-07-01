@@ -1,20 +1,30 @@
-# client.py
-from pyrogram import Client
-from info import API_ID, API_HASH, BOT_TOKEN
+import asyncio
+import logging
+from Client import bot
+from utils.Helpers import create_indexes
 
-class Bot(Client):
-    def __init__(self):
-        super().__init__(
-            name="RMCFILTERBOT",
-            api_id=API_ID,
-            api_hash=API_HASH,
-            bot_token=BOT_TOKEN,
-            plugins={"root": "plugins"}
-        )
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
+async def main():
+    # Create database indexes
+    await create_indexes()
+    
+    # Start the bot
+    await bot.start()
+    logger.info("RMC Bot Started Successfully!")
+    
+    # Get bot info
+    me = await bot.get_me()
+    logger.info(f"Bot ID: {me.id}, Username: @{me.username}")
+    
+    # Run indefinitely
+    await asyncio.Event().wait()
 
-# main.py
-from client import Bot
-
-print("Bot Started 👍 Powered By @VJ_Botz")
-Bot().run()
+if __name__ == "__main__":
+    asyncio.run(main())
