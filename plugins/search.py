@@ -1,104 +1,122 @@
-import logging
-import asyncio
 from pyrogram import Client, filters
-from utils.Helpers import get_group, perform_fast_channel_search, delete_after_delay
-from plugins.Fsub import force_sub
-from info import API_ID, API_HASH
-from plugins.generate import database  # Your session manager
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from plugins.generate import database  # Fixed import
+from config import RESULTS_PER_PAGE, MAX_RESULTS, CACHE_TIME
+import re
 
-logger = logging.getLogger(__name__)
+# Search cache for pagination
+search_cache = {}
 
-async def perform_search(bot, chat_id, user_id, query):
-    """Actual search implementation"""
-    try:
-        # Get group
-        group = await get_group(chat_id)
-        if not group or not group.get("channels"):
-            return
-            
-        # Get user session
-        vj = database.find_one({"chat_id": ADMIN})
-        if not vj:
-            return
-            
-        # Connect user client
-        async with Client(
-            "user_session", 
-            session_string=vj['session'], 
-            api_hash=API_HASH, 
-            api_id=API_ID
-        ) as user_client:
-            # Perform search
-            results = await perform_fast_channel_search(
-                user_client, 
-                group["channels"], 
-                query
-            )
-            
-            if results:
-                # Format response
-                response = (
-                    f"🔍 Results for: `{query}`\n\n"
-                    f"{results}\n\n"
-                    f"✨ Powered by @RMCBACKUP"
-                )
-                msg = await bot.send_message(chat_id, response)
-                asyncio.create_task(delete_after_delay(msg, 40))
-            else:
-                # No results
-                msg = await bot.send_message(
-                    chat_id,
-                    f"🔍 No results found for: `{query}`\n\nRequest admin to add content:",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("📬 Request Content", callback_data=f"request_{query}")
-                    ]])
-                )
-                asyncio.create_task(delete_after_delay(msg, 40))
-                
-    except Exception as e:
-        logger.error(f"Search error: {str(e)}")
+def clean_query(query):
+    """Remove special characters from search query"""
+    return re.sub(r'[^\w\s]', '', query)
 
-@Client.on_message(filters.group & filters.text & ~filters.command)
-async def search_handler(bot, message):
-    """Main search handler"""
-    # First check force sub
-    if not await force_sub(bot, message):
+@Client.on_message(filters.command("search"))
+async def handle_search(client: Client, message: Message):
+    """Handle search requests with pagination"""
+    query = message.text.split(" ", 1)
+    if len(query) < 2:
+        await message.reply("🔍 Please provide a search query after /search command")
         return
-        
-    # Then process search
-    await perform_search(
-        bot,
-        message.chat.id,
-        message.from_user.id,
-        message.text
+    
+    query = clean_query(query[1].strip())
+    if not query:
+        await message.reply("❌ Please enter a valid search term")
+        return
+    
+    # Perform search
+    results = list(database.find(
+        {"$text": {"$search": query}},
+        {"score": {"$meta": "textScore"}}
+    ).sort("score", -1).limit(MAX_RESULTS))
+    
+    if not results:
+        await message.reply(f"❌ No results found for '{query}'")
+        return
+    
+    # Store results in cache for pagination
+    cache_key = f"{message.from_user.id}-{query}"
+    search_cache[cache_key] = {
+        "results": results,
+        "query": query,
+        "page": 1
+    }
+    
+    # Show first page
+    await show_results_page(client, message, cache_key)
+
+async def show_results_page(client, message, cache_key):
+    """Show a page of search results"""
+    if cache_key not in search_cache:
+        await message.reply("⌛ Search session expired. Please perform a new search")
+        return
+    
+    cache = search_cache[cache_key]
+    page = cache["page"]
+    results = cache["results"]
+    query = cache["query"]
+    
+    # Calculate pagination
+    total_pages = (len(results) + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE
+    start_idx = (page - 1) * RESULTS_PER_PAGE
+    end_idx = min(start_idx + RESULTS_PER_PAGE, len(results))
+    
+    # Build results message
+    response = f"🔍 Search results for '{query}' (Page {page}/{total_pages}):\n\n"
+    for i in range(start_idx, end_idx):
+        post = results[i]
+        caption_preview = post['caption'][:75] + "..." if post['caption'] else "No caption"
+        response += f"{i+1}. {caption_preview}\n"
+        response += f"   👉 [View Post](https://t.me/c/{post['chat']}/{post['id']})\n\n"
+    
+    # Build pagination buttons
+    buttons = []
+    if page > 1:
+        buttons.append(InlineKeyboardButton("⬅️ Previous", callback_data=f"prev_{cache_key}"))
+    if page < total_pages:
+        buttons.append(InlineKeyboardButton("Next ➡️", callback_data=f"next_{cache_key}"))
+    
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+    
+    # Send response
+    await message.reply(
+        response,
+        reply_markup=keyboard,
+        disable_web_page_preview=True
     )
 
-@Client.on_callback_query(filters.regex(r"^request_"))
-async def handle_request(bot, update):
-    """Handle content requests"""
-    try:
-        # Get requested content
-        requested_content = update.data.split("_", 1)[1]
-        
-        # Get group admin
-        group = await get_group(update.message.chat.id)
-        if not group:
-            return
-            
-        admin_id = group["user_id"]
-        
-        # Send request
-        await bot.send_message(
-            admin_id,
-            f"📬 Content Request\n\n"
-            f"👤 From: {update.from_user.mention}\n"
-            f"👥 Group: {update.message.chat.title}\n"
-            f"🔍 Requested: `{requested_content}`"
-        )
-        
-        await update.answer("✅ Request sent to admin!", show_alert=True)
-        await update.message.delete()
-        
-    except Exception as e:
-        logger.error(f"Request error: {str(e)}")
-        await update.answer("⚠️ Failed to send request!", show_alert=True)
+@Client.on_callback_query(filters.regex(r"^(prev|next)_(.+)"))
+async def handle_pagination(client, callback_query):
+    """Handle pagination callback queries"""
+    action, cache_key = callback_query.data.split("_", 1)
+    cache = search_cache.get(cache_key)
+    
+    if not cache:
+        await callback_query.answer("Session expired. Perform a new search.")
+        return
+    
+    if action == "prev":
+        if cache["page"] > 1:
+            cache["page"] -= 1
+    elif action == "next":
+        total_pages = (len(cache["results"]) + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE
+        if cache["page"] < total_pages:
+            cache["page"] += 1
+    
+    await callback_query.answer()
+    await show_results_page(client, callback_query.message, cache_key)
+    await callback_query.message.delete()
+
+@Client.on_message(filters.command("start"))
+async def start_command(client: Client, message: Message):
+    """Welcome message with instructions"""
+    welcome = (
+        "👋 Welcome to the Post Search Bot!\n\n"
+        "🔍 To search for posts, use:\n"
+        "`/search query`\n\n"
+        "Examples:\n"
+        "• `/search python tutorial`\n"
+        "• `/search important announcement`\n\n"
+        "📚 Use pagination buttons to navigate through results."
+    )
+    await message.reply(welcome)
