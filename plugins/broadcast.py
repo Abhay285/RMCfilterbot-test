@@ -1,52 +1,83 @@
-# plugins/broadcast.py
+import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message
-from info import ADMINS, LOG_CHANNEL
-from pymongo import MongoClient
-from info import DATABASE_URI
+from pyrogram.errors import FloodWait
 
-client_db = MongoClient(DATABASE_URI)
-db = client_db['filterbot']
-sessions = db['sessions']
-users = db['users']
-
-@Client.on_message(filters.command("login") & filters.private)
-async def login(client, message: Message):
-    if str(message.from_user.id) in ADMINS:
-        sessions.update_one({"user_id": message.from_user.id}, {"$set": {"active": True}}, upsert=True)
-        await message.reply("✅ Login successful.")
-
-@Client.on_message(filters.command("logout") & filters.private)
-async def logout(client, message: Message):
-    sessions.delete_one({"user_id": message.from_user.id})
-    await message.reply("🔒 Logged out.")
-
-@Client.on_message(filters.command("broadcast") & filters.private)
-async def broadcast_handler(client, message: Message):
-    if not sessions.find_one({"user_id": message.from_user.id}):
-        return await message.reply("❌ You are not logged in.")
+@Client.on_message(filters.command('broadcast') & filters.user(ADMIN))
+async def user_broadcast(bot, message):
     if not message.reply_to_message:
-        return await message.reply("Reply to a message to broadcast.")
+        return await message.reply("Use this command as a reply to any message!")
+    
+    m = await message.reply("⚡ Starting user broadcast...")
+    users = await get_users()
+    total = len(users)
+    success = failed = 0
 
-    sent = 0
-    for user in users.find():
+    for index, user in enumerate(users):
         try:
-            await client.copy_message(user['user_id'], message.chat.id, message.reply_to_message.id)
-            sent += 1
-        except: continue
-    await message.reply(f"✅ Broadcast sent to {sent} users.")
+            await message.reply_to_message.copy(user["_id"])
+            success += 1
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 2)
+            await message.reply_to_message.copy(user["_id"])
+            success += 1
+        except Exception:
+            await delete_user(user["_id"])
+            failed += 1
+        
+        if index % 100 == 0 or index == total - 1:
+            await m.edit(script.BROADCAST.format(
+                "IN PROGRESS", 
+                total, 
+                total - index - 1,
+                success,
+                failed
+            ))
+    
+    await m.edit(script.BROADCAST.format(
+        "USER BROADCAST COMPLETED", 
+        total, 
+        0,
+        success,
+        failed
+    ))
 
-@Client.on_message(filters.command("user") & filters.private)
-async def user_handler(client, message: Message):
-    await message.reply(f"👤 Your ID: `{message.from_user.id}`")
+@Client.on_message(filters.command('broadcast_groups') & filters.user(ADMIN))
+async def group_broadcast(bot, message):
+    if not message.reply_to_message:
+        return await message.reply("Use this command as a reply to any message!")
+    
+    m = await message.reply("⚡ Starting group broadcast...")
+    groups = await get_groups()
+    total = len(groups)
+    success = failed = 0
 
-@Client.on_message(filters.command("userc") & filters.private)
-async def userc_handler(client, message: Message):
-    count = users.count_documents({})
-    await message.reply(f"👥 Total users: {count}")
-
-@Client.on_message(filters.command("stats") & filters.private)
-async def stats_handler(client, message: Message):
-    count = users.count_documents({})
-    admins = ", ".join(ADMINS)
-    await message.reply(f"📊 Users: {count}\n👮 Admins: {admins}")
+    for index, group in enumerate(groups):
+        try:
+            msg = await message.reply_to_message.copy(group["_id"])
+            await msg.pin(disable_notification=True)
+            success += 1
+        except FloodWait as e:
+            await asyncio.sleep(e.value + 2)
+            msg = await message.reply_to_message.copy(group["_id"])
+            await msg.pin(disable_notification=True)
+            success += 1
+        except Exception:
+            await delete_group(group["_id"])
+            failed += 1
+        
+        if index % 50 == 0 or index == total - 1:
+            await m.edit(script.BROADCAST.format(
+                "IN PROGRESS", 
+                total, 
+                total - index - 1,
+                success,
+                failed
+            ))
+    
+    await m.edit(script.BROADCAST.format(
+        "GROUP BROADCAST COMPLETED", 
+        total, 
+        0,
+        success,
+        failed
+    ))
