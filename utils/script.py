@@ -1,36 +1,41 @@
-# utils/script.py
-START_TEXT = """
-👋 Hello {mention},
+class script(object):
+    START = """**ʜᴇʟʟᴏ {} 🤟**
+   
+<b>ɪ ᴀᴍ RMC POST FILTER ʙᴏᴛ. ɪ ᴀᴍ ʙᴇsᴛ ᴄʜᴀɴɴᴇʟ ʟɪɴᴋ sᴇᴀʀᴄʜ ʙᴏᴛ! 
+ɪ ᴡɪʟʟ ғɪʟᴛᴇʀ ʏᴏᴜʀ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛs ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴀɴᴅ sᴇɴᴅ ɪᴛ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ ᴄʜᴀᴛ ᴡʜᴇɴ sᴏᴍᴇᴏɴᴇ sᴇᴀʀᴄʜ ɪᴛ.</b>"""
 
-I'm a powerful filter + search bot. I can help you manage and search posts across connected channels.
+    HELP = """<b>💢 ʜᴏᴡ ᴛᴏ ᴜsᴇ ᴍᴇ ɪɴ ᴀ ɢʀᴏᴜᴘ
 
-Use /help to see what I can do!
-"""
+🔻 ᴀᴅᴅ ᴍᴇ ɪɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ & ᴄʜᴀɴɴᴇʟ ᴡɪᴛʜ ᴀʟʟ ᴘᴇʀᴍɪssɪᴏɴs. 
+🔻 sᴇɴᴅ /verify ɪɴ ɢʀᴏᴜᴘ & ᴡᴀɪᴛ ғᴏʀ ɪᴛ ᴛᴏ ᴀᴄᴄᴇᴘᴛ ᴏʀ ᴅɪʀᴇᴄᴛʟʏ ᴄᴏɴᴛᴀᴄᴛ ᴛᴏ ᴏᴡɴᴇʀ ᴀғᴛᴇʀ ʀᴇǫᴜᴇsᴛ @ABHAYKENWAT.
+🔻 ᴀғᴛᴇʀ ᴠᴇʀɪғɪᴄᴀᴛɪᴏɴ sᴇɴᴅ /connect ʏᴏᴜʀᴄʜᴀɴɴᴇʟɪᴅ. ( ғᴏʀ ᴍᴜʟᴛɪᴘʟᴇ ᴄʜᴀɴɴᴇʟs ᴜsᴇ ᴛʜɪs ᴄᴏᴍᴍᴀɴᴅ ᴍᴜʟᴛɪᴘʟᴇ ᴛɪᴍᴇs )
+🔻 ᴇxᴀᴍᴘʟᴇ : /connect -100xxxxxxxxxx
 
-HELP_TEXT = """
-🛠 **Bot Commands:**
+⭕ ғᴏʀ ғᴏʀᴄᴇ sᴜʙsᴄʀɪʙᴇ ᴜsᴇ 
+/fsub (ғsᴜʙɪᴅ)
+🔻 ᴅɪsᴄᴏɴɴᴇᴄᴛ ʙʏ /nofsub (ғsᴜʙɪᴅ)
 
-/start - Check if I'm alive
-/id - Get Channel/Group/User ID
-/verify - Verify group connection
-/connect - Connect to a channel
-/disconnect - Remove connection
-/fsub - Set force subscribe channel
-/nofsub - Remove force subscribe
-/stats - Get usage stats
-/broadcast - Send message to all users
-/login - Owner login
-/logout - Logout session
-/user - User details
-/userc - User count
-/connections - List connected channels
-/help - Show this help message
-"""
+❣️ ɢᴇᴛ ᴄʜᴀɴɴᴇʟ ɪᴅ ʙʏ ᴄᴏᴍᴍᴀɴᴅ - /id
+❣️ ʀᴇᴍᴏᴠᴇ ᴀ ᴄʜᴀɴɴᴇʟ ᴡɪᴛʜ - /disconnect -100xxxxxxxxxxx
+ᴛʜɪs ᴡɪʟʟ ʜᴇʟᴘ ʏᴏᴜ ᴛᴏ ʀᴇᴍᴏᴠᴇ ᴀ ɪɴᴅᴇxᴇᴅ ᴄʜᴀɴɴᴇʟ ғʀᴏᴍ ʏᴏᴜʀ ɢʀᴏᴜᴘ.
 
-VERIFY_MESSAGE = "✅ Group verified successfully!"
-NOT_SUBSCRIBED = "🔒 Please join our channel to use this bot."
-TRY_AGAIN_BTN = "✅ Joined, Try Again"
-JOIN_MESSAGE = "You need to join [this channel](https://t.me/{}) to use the bot."
+♨️ ɢᴇᴛ ᴄᴏɴɴᴇᴄᴛᴇᴅ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ ᴡɪᴛʜ - /connections</b>"""
 
-INVALID_COMMAND = "⚠️ Invalid command. Use /help to see available options."
-LOG_TEXT = "👤 User: `{}`\n🔍 Query: `{}`\n🕒 Time: `{}`"
+    ABOUT = """<b>╭━━━━━━━❰ [𝙰𝙱𝙾𝚄𝚃](https://t.me/RMCBACKUP) ❱━━━━━━━➣
+
+┣ ✯ Mʏ Nᴀᴍᴇ:  {}
+┣ ✯ Cʀᴇᴀᴛᴏʀ: <a href='https://t.me/Abhaykenwat'>RMC BACKUP</a>
+┣ ✯ Lᴀɴɢᴜᴀɢᴇ: <a href='https://www.python.org'>Pʏᴛʜᴏɴ 3</a>
+┣ ✯ DᴀᴛᴀBᴀsᴇ: <a href='https://cloud.mongodb.com/'>MᴏɴɢᴏDB</a></b>"""
+
+    STATS = """<b>My Status 💫
+
+👥 Users: {}
+🧿 Groups: {}</b>"""
+
+    BROADCAST = """<u>{}</u>
+
+Total: `{}`
+Remaining: `{}`
+Success: `{}`
+Failed: `{}`"""
