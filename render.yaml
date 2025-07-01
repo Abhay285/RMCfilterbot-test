@@ -1,0 +1,16 @@
+# render.yaml
+services:
+  - type: worker
+    name: telegram-bot
+    env: python
+    python:
+      version: 3.10.12  # Match your local Python version
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: API_ID
+        fromSecret: telegram_api_id
+      - key: API_HASH
+        fromSecret: telegram_api_hash
+      - key: BOT_TOKEN
+        fromSecret: telegram_bot_token
