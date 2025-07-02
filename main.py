@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from Client import bot
-from utils.Helpers import create_indexes
+from client import bot
+from utils.helpers import create_indexes
 
 logging.basicConfig(
     level=logging.INFO,
