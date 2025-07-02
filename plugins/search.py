@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from pyrogram import Client, filters
-from utils.Helpers import get_group, perform_fast_channel_search, delete_after_delay
+from utils.helpers import get_group, perform_fast_channel_search, delete_after_delay
 from plugins.Fsub import force_sub
 from info import API_ID, API_HASH
 from plugins.generate import database  # Your session manager
