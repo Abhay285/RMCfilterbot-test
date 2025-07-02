@@ -1,8 +1,8 @@
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.Helpers import get_group, update_group
-from utils.Script import script
+from utils.helpers import get_group, update_group
+from utils.script import script
 from info import LOG_CHANNEL
 
 logger = logging.getLogger(__name__)
