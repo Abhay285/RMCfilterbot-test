@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from client import bot
+from Client import bot
 from utils.helpers import create_indexes
 
 logging.basicConfig(
