@@ -1,8 +1,8 @@
 import logging
 import asyncio
 from pyrogram import Client, filters
-from utils.Helpers import add_group
-from utils.Script import script
+from utils.helpers import add_group
+from utils.script import script
 from info import LOG_CHANNEL
 
 logger = logging.getLogger(__name__)
