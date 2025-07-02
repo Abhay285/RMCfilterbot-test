@@ -1,8 +1,8 @@
 import logging
 import asyncio
 from pyrogram import Client, filters
-from utils.Helpers import get_users, get_groups
-from utils.Script import script
+from utils.helpers import get_users, get_groups
+from utils.script import script
 from info import ADMIN
 
 logger = logging.getLogger(__name__)
