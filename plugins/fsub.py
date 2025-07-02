@@ -3,8 +3,8 @@ import asyncio
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import UserNotParticipant
-from utils.Helpers import get_group, save_pending_request, delete_after_delay
-from utils.Script import script
+from utils.helpers import get_group, save_pending_request, delete_after_delay
+from utils.script import script
 from info import LOG_CHANNEL
 
 logger = logging.getLogger(__name__)
