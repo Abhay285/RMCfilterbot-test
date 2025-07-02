@@ -1,7 +1,7 @@
 import logging
 from pyrogram import Client, filters
-from utils.Helpers import add_user, total_users_count, total_chat_count
-from utils.Script import script
+from utils.helpers import add_user, total_users_count, total_chat_count
+from utils.script import script
 from info import ADMIN
 
 logger = logging.getLogger(__name__)
